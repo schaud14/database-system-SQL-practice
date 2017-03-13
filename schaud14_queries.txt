@@ -1,0 +1,199 @@
+--Database Systems: Project 1: Saurabh Chaudhari
+--#1
+select 
+  CONCAT(courses.dept_code,courses.course#) as course_id,
+  courses.title 
+from 
+  courses 
+  INNER JOIN classes 
+  ON  courses.dept_code = classes.dept_code and 
+      courses.course# = classes.course#
+where 
+  classes.semester = 'Spring' and 
+  classes.year ='2016';
+
+--#2
+select FIRSTNAME from STUDENTS where sid in
+  (select sid from ENROLLMENTS where CLASSID in 
+  (select classid from classes where dept_code = 'CS')
+  intersect 
+  select sid from ENROLLMENTS where CLASSID in 
+  (select classid from classes where dept_code = 'Math'));
+
+--#3
+select dept_code,COURSE# from courses
+minus
+select dept_code,COURSE# from classes where year = '2015';
+
+--#4
+SELECT sid,firstname,GPA 
+from students where sid in
+  ( select sid 
+    from ENROLLMENTS 
+    where ENROLLMENTS.sid =students.SID and 
+    ENROLLMENTS.LGRADE ='A' and 
+    students.STATUS <>'graduate');
+
+--#5
+select firstname from students where sid in(
+  select sid from enrollments where lgrade <>'A' group by sid 
+  minus
+  select sid from enrollments where lgrade ='A' group by sid);
+
+--#6
+select sid, firstname from students where sid in 
+  (select sid from enrollments where  lgrade = 'A')
+minus
+select sid, firstname from students s where exists 
+  (select sid from enrollments e where e.sid = s.sid and lgrade <> 'A');
+
+--#7
+with class_count as 
+  ( select 
+      dept_code,course#,count(concat(dept_code,course#))as classcount 
+    from classes GROUP BY dept_code,course#)
+select dept_code,course# 
+from class_count 
+where classcount = (select max(classcount) from class_count);
+
+--#8
+select 
+  classid, dept_code, course#,semester,year, 
+  (limit-CLASS_SIZE) as seats_available 
+from 
+  classes 
+where 
+  year = '2016' and 
+  semester = 'Spring' and 
+  limit>CLASS_SIZE;
+
+--#9
+with classcount as 
+  (select sid, count(sid) as classes_taken from enrollments group by sid)
+select * from students 
+where sid in 
+  (select sid from classcount where classes_taken > 4);
+
+--#10
+with class_info as (
+  select classid, count(classid) as total_enrolled from enrollments where classid in(
+  select classid from classes 
+    where DEPT_CODE = 'CS' and SEMESTER = 'Spring' and YEAR = '2016') group by CLASSID) 
+select * from classes 
+where CLASSID in 
+  (select classid from class_info where total_enrolled < 3) ;
+
+--#11
+select sid,firstname from students s where not exists
+  (select * from courses c where DEPT_CODE = 'CS' and course# like '4%' and not exists 
+    (select * from classes cl,ENROLLMENTS e 
+        where e.sid = s.sid and cl.classid = e.classid and 
+        c.dept_code = cl.dept_code and c.course# = cl.course#)); 
+
+--#12
+select title from courses c where concat(DEPT_CODE,COURSE#) in (
+  select concat(DEPT_CODE,COURSE#) from classes c where c.classid in( 
+    select classid from enrollments e where e.sid = 'B001')
+minus
+  select concat(DEPT_CODE,COURSE#) from classes c where c.classid in( 
+    select classid from enrollments e where e.sid = 'B002'))
+group by c.TITLE;
+
+--#13
+with course_list as 
+  (select concat(DEPT_CODE,COURSE#) as courses_taken from classes c 
+      where c.classid in(select classid from enrollments e where e.sid = 'B005'))
+select firstname 
+from students 
+where sid in 
+  (select sid from enrollments 
+    where classid in 
+      (select classid from classes 
+        where concat(DEPT_CODE,COURSE#) in 
+          (select courses_taken from course_list))) 
+group by firstname;
+
+--#14
+select c1.DEPT_CODE,c2.course#,c1.SEMESTER,c2.year 
+from classes c1 
+  join  classes c2 
+  on  c1.classid<>c2.classid and 
+      concat(c1.DEPT_CODE,c1.COURSE#) = concat(c2.DEPT_CODE,c2.COURSE#) and 
+      concat(c1.year,c1.SEMESTER) = concat(c2.year,c1.SEMESTER)
+group by c1.DEPT_CODE,c2.course#,c1.SEMESTER,c2.year;
+
+--#15
+with maxgrades as (
+  select classid, min(lgrade), concat(classid, min(lgrade)) as class_grade 
+  from enrollments e2 
+  group by classid )
+select sid,firstname 
+from students 
+where sid in 
+  (select sid from enrollments e 
+    where concat(e.classid, e.lgrade) in
+      (select class_grade from  maxgrades)); 
+
+--#16
+select c.DEPT_CODE,c.COURSE#,c.TITLE,coalesce(e.lgrade,'to be assigned') as grade 
+from enrollments e 
+    join classes cl 
+    on e.classid = cl.classid and e.sid = 'B003' 
+        join courses c 
+        on c.dept_code = cl.dept_code and c.course# = cl.course#;
+
+--#17
+select * from courses 
+where title like '%systems%' and concat(dept_code,course#) in 
+  ( select concat(dept_code,course#) 
+    from classes 
+    where classid in 
+      ( select classid 
+        from enrollments 
+        where sid in 
+          (select sid from students where gpa > 3.25)));
+
+--#18
+with credits_taken as(
+  select sid, sum(cc.CREDITS) as credit from enrollments e
+    join classes cl 
+    on e.classid = cl.classid
+    join course_credit cc 
+    on cl.course# = cc.COURSE#
+  where e.LGRADE is not null
+  group by sid)
+select s.sid, s.firstname, coalesce(ct.credit,0) 
+from STUDENTS s
+  left outer join credits_taken ct 
+  on s.sid = ct.sid
+order by s.sid asc;
+
+--#19
+with credits_taken as(
+    select sid,sum(cc.CREDITS) as credit 
+    from enrollments e
+      join classes cl 
+      on e.classid = cl.classid
+      join course_credit cc 
+      on cl.course# = cc.COURSE#
+    where e.LGRADE is not null
+    group by sid)
+select avg(credit) 
+from credits_taken;
+
+--#20
+with nlgrades as 
+    (select * from enrollments e 
+        join grades g 
+        on e.lgrade = g.lgrade)
+select * from 
+    (with gpainfo  as 
+        ( select sid, round(sum(ngrade)/count(sid),2) as cgpa 
+          from nlgrades 
+          group by sid)
+    select s.sid,g.cgpa 
+    from students s 
+      left OUTER join gpainfo g 
+      on s.sid = g.SID 
+      where g.cgpa is not null
+    ORDER BY g.cgpa desc) ;

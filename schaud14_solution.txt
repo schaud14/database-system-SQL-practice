@@ -1,0 +1,341 @@
+SQL> start script.sql
+SQL> --#1
+SQL> select
+  2    CONCAT(courses.dept_code,courses.course#) as course_id,
+  3    courses.title
+  4  from
+  5    courses
+  6    INNER JOIN classes
+  7    ON  courses.dept_code = classes.dept_code and
+  8  	   courses.course# = classes.course#
+  9  where
+ 10    classes.semester = 'Spring' and
+ 11    classes.year ='2016';
+
+COURSE_ID                                    TITLE                              
+-------------------------------------------- --------------------               
+CS432                                        database systems                   
+CS240                                        data structure                     
+Math221                                      calculus I                         
+CS532                                        database systems                   
+
+SQL> 
+SQL> --#2
+SQL> select FIRSTNAME from STUDENTS where sid in
+  2    (select sid from ENROLLMENTS where CLASSID in
+  3    (select classid from classes where dept_code = 'CS')
+  4    intersect
+  5    select sid from ENROLLMENTS where CLASSID in
+  6    (select classid from classes where dept_code = 'Math'));
+
+FIRSTNAME                                                                       
+---------------                                                                 
+Anne                                                                            
+
+SQL> 
+SQL> --#3
+SQL> select dept_code,COURSE# from courses
+  2  minus
+  3  select dept_code,COURSE# from classes where year = '2015';
+
+DEPT    COURSE#                                                                 
+---- ----------                                                                 
+BIOL        425                                                                 
+CS          240                                                                 
+CS          532                                                                 
+CS          552                                                                 
+Math        221                                                                 
+
+SQL> 
+SQL> --#4
+SQL> SELECT sid,firstname,GPA
+  2  from students where sid in
+  3    ( select sid
+  4  	 from ENROLLMENTS
+  5  	 where ENROLLMENTS.sid =students.SID and ENROLLMENTS.LGRADE ='A' and students.STATUS <>'graduate');
+
+SID  FIRSTNAME              GPA                                                 
+---- --------------- ----------                                                 
+B001 Anne                  3.17                                                 
+B003 Tracy                    4                                                 
+B007 Becky                    4                                                 
+
+SQL> 
+SQL> --#5
+SQL> select firstname from students where sid in(
+  2    select sid from enrollments where lgrade <>'A' group by sid
+  3    minus
+  4    select sid from enrollments where lgrade ='A' group by sid);
+
+FIRSTNAME                                                                       
+---------------                                                                 
+Terry                                                                           
+Barbara                                                                         
+Jack                                                                            
+
+SQL> 
+SQL> --#6
+SQL> select sid, firstname from students where sid in
+  2    (select sid from enrollments where  lgrade = 'A')
+  3  minus
+  4  select sid, firstname from students s where exists
+  5    (select sid from enrollments e where e.sid = s.sid and lgrade <> 'A');
+
+SID  FIRSTNAME                                                                  
+---- ---------------                                                            
+B003 Tracy                                                                      
+B006 Terry                                                                      
+B007 Becky                                                                      
+
+SQL> 
+SQL> --#7
+SQL> with class_count as
+  2    ( select
+  3  	   dept_code,course#,count(concat(dept_code,course#))as classcount
+  4  	 from classes GROUP BY dept_code,course#)
+  5  select dept_code,course#
+  6  from class_count
+  7  where classcount = (select max(classcount) from class_count);
+
+DEPT    COURSE#                                                                 
+---- ----------                                                                 
+CS          432                                                                 
+Math        314                                                                 
+
+SQL> 
+SQL> --#8
+SQL> select classid, dept_code, course#,semester,year, (limit-CLASS_SIZE) as seats_available
+  2  from
+  3    classes
+  4  where
+  5    year = '2016' and
+  6    semester = 'Spring' and
+  7    limit>CLASS_SIZE;
+
+CLASS DEPT    COURSE# SEMEST       YEAR SEATS_AVAILABLE                         
+----- ---- ---------- ------ ---------- ---------------                         
+c0005 CS          240 Spring       2016               1                         
+c0001 CS          432 Spring       2016               1                         
+c0006 CS          532 Spring       2016               1                         
+
+SQL> 
+SQL> --#9
+SQL> with classcount as
+  2    (select sid, count(sid) as classes_taken from enrollments group by sid)
+  3  select * from students
+  4  where sid in
+  5    (select sid from classcount where classes_taken > 4);
+
+SID  FIRSTNAME       LASTNAME        STATUS            GPA EMAIL                
+---- --------------- --------------- ---------- ---------- -------------------- 
+B001 Anne            Broder          junior           3.17 broder@bu.edu        
+
+SQL> 
+SQL> --#10
+SQL> with class_info as (
+  2    select classid, count(classid) as total_enrolled from enrollments where classid in(
+  3    select classid from classes
+  4  	 where DEPT_CODE = 'CS' and SEMESTER = 'Spring' and YEAR = '2016') group by CLASSID)
+  5  select * from classes
+  6  where CLASSID in
+  7    (select classid from class_info where total_enrolled < 3) ;
+
+CLASS DEPT    COURSE#      SECT#       YEAR SEMEST      LIMIT CLASS_SIZE        
+----- ---- ---------- ---------- ---------- ------ ---------- ----------        
+c0001 CS          432          1       2016 Spring         35         34        
+
+SQL> 
+SQL> --#11
+SQL> select sid,firstname from students s where not exists
+  2    (select * from courses c where DEPT_CODE = 'CS' and course# like '4%' and not exists
+  3  	 (select * from classes cl,ENROLLMENTS e
+  4  	     where e.sid = s.sid and cl.classid = e.classid and
+  5  	     c.dept_code = cl.dept_code and c.course# = cl.course#));
+
+SID  FIRSTNAME                                                                  
+---- ---------------                                                            
+B001 Anne                                                                       
+B003 Tracy                                                                      
+B004 Barbara                                                                    
+
+SQL> 
+SQL> --#12
+SQL> select title from courses c where concat(DEPT_CODE,COURSE#) in (
+  2    select concat(DEPT_CODE,COURSE#) from classes c where c.classid in(
+  3  	 select classid from enrollments e where e.sid = 'B001')
+  4  minus
+  5    select concat(DEPT_CODE,COURSE#) from classes c where c.classid in(
+  6  	 select classid from enrollments e where e.sid = 'B002'))
+  7  group by c.TITLE;
+
+TITLE                                                                           
+--------------------                                                            
+database systems                                                                
+data structure                                                                  
+
+SQL> 
+SQL> --#13
+SQL> with course_list as
+  2    (select concat(DEPT_CODE,COURSE#) as courses_taken from classes c
+  3  	   where c.classid in(select classid from enrollments e where e.sid = 'B005'))
+  4  select firstname
+  5  from students
+  6  where sid in
+  7    (select sid from enrollments
+  8  	 where classid in
+  9  	   (select classid from classes
+ 10  	     where concat(DEPT_CODE,COURSE#) in
+ 11  	       (select courses_taken from course_list)))
+ 12  group by firstname;
+
+FIRSTNAME                                                                       
+---------------                                                                 
+Terry                                                                           
+Jack                                                                            
+Anne                                                                            
+
+SQL> 
+SQL> --#14
+SQL> select c1.DEPT_CODE,c2.course#,c1.SEMESTER,c2.year
+  2  from classes c1
+  3    join  classes c2
+  4    on  c1.classid<>c2.classid and
+  5  	   concat(c1.DEPT_CODE,c1.COURSE#) = concat(c2.DEPT_CODE,c2.COURSE#) and
+  6  	   concat(c1.year,c1.SEMESTER) = concat(c2.year,c1.SEMESTER)
+  7  group by c1.DEPT_CODE,c2.course#,c1.SEMESTER,c2.year;
+
+DEPT    COURSE# SEMEST       YEAR                                               
+---- ---------- ------ ----------                                               
+Math        314 Fall         2015                                               
+
+SQL> 
+SQL> --#15
+SQL> with maxgrades as (
+  2    select classid, min(lgrade), concat(classid, min(lgrade)) as class_grade
+  3    from enrollments e2
+  4    group by classid )
+  5  select sid,firstname
+  6  from students
+  7  where sid in
+  8    (select sid from enrollments e
+  9  	 where concat(e.classid, e.lgrade) in
+ 10  	   (select class_grade from  maxgrades));
+
+SID  FIRSTNAME                                                                  
+---- ---------------                                                            
+B001 Anne                                                                       
+B002 Terry                                                                      
+B003 Tracy                                                                      
+B004 Barbara                                                                    
+B006 Terry                                                                      
+B007 Becky                                                                      
+
+6 rows selected.
+
+SQL> 
+SQL> --#16
+SQL> select c.DEPT_CODE,c.COURSE#,c.TITLE,coalesce(e.lgrade,'to be assigned') as grade
+  2  from enrollments e
+  3  	 join classes cl
+  4  	 on e.classid = cl.classid and e.sid = 'B003'
+  5  	     join courses c
+  6  	     on c.dept_code = cl.dept_code and c.course# = cl.course#;
+
+DEPT    COURSE# TITLE                GRADE                                      
+---- ---------- -------------------- --------------                             
+CS          432 database systems     A                                          
+CS          240 data structure       to be assigned                             
+
+SQL> 
+SQL> --#17
+SQL> select * from courses
+  2  where title like '%systems%' and concat(dept_code,course#) in
+  3    ( select concat(dept_code,course#)
+  4  	 from classes
+  5  	 where classid in
+  6  	   ( select classid
+  7  	     from enrollments
+  8  	     where sid in
+  9  	       (select sid from students where gpa > 3.25)));
+
+DEPT    COURSE# TITLE                                                           
+---- ---------- --------------------                                            
+CS          432 database systems                                                
+CS          532 database systems                                                
+
+SQL> 
+SQL> --#18
+SQL> with credits_taken as(
+  2    select sid, sum(cc.CREDITS) as credit from enrollments e
+  3  	 join classes cl
+  4  	 on e.classid = cl.classid
+  5  	 join course_credit cc
+  6  	 on cl.course# = cc.COURSE#
+  7    where e.LGRADE is not null
+  8    group by sid)
+  9  select s.sid, s.firstname, coalesce(ct.credit,0)
+ 10  from STUDENTS s
+ 11    left outer join credits_taken ct
+ 12    on s.sid = ct.sid
+ 13  order by s.sid asc;
+
+SID  FIRSTNAME       COALESCE(CT.CREDIT,0)                                      
+---- --------------- ---------------------                                      
+B001 Anne                               23                                      
+B002 Terry                               4                                      
+B003 Tracy                               4                                      
+B004 Barbara                             8                                      
+B005 Jack                                3                                      
+B006 Terry                               3                                      
+B007 Becky                               4                                      
+B008 Tom                                 0                                      
+
+8 rows selected.
+
+SQL> 
+SQL> --#19
+SQL> with credits_taken as(
+  2  	 select sid,sum(cc.CREDITS) as credit
+  3  	 from enrollments e
+  4  	   join classes cl
+  5  	   on e.classid = cl.classid
+  6  	   join course_credit cc
+  7  	   on cl.course# = cc.COURSE#
+  8  	 where e.LGRADE is not null
+  9  	 group by sid)
+ 10  select avg(credit)
+ 11  from credits_taken;
+
+AVG(CREDIT)                                                                     
+-----------                                                                     
+          7                                                                     
+
+SQL> 
+SQL> --#20
+SQL> with nlgrades as
+  2  	 (select * from enrollments e
+  3  	     join grades g
+  4  	     on e.lgrade = g.lgrade)
+  5  select * from
+  6  	 (with gpainfo	as
+  7  	     ( select sid, round(sum(ngrade)/count(sid),2) as cgpa
+  8  	       from nlgrades
+  9  	       group by sid)
+ 10  	 select s.sid,g.cgpa
+ 11  	 from students s
+ 12  	   left OUTER join gpainfo g
+ 13  	   on s.sid = g.SID
+ 14  	   where g.cgpa is not null
+ 15  	 ORDER BY g.cgpa desc) ;
+
+SID        CGPA                                                                 
+---- ----------                                                                 
+B003          4                                                                 
+B007          4                                                                 
+B006          4                                                                 
+B001       3.17                                                                 
+B002          3                                                                 
+B005          3                                                                 
+B004        2.5                                                                 
+
+7 rows selected.
